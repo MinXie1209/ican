@@ -1,0 +1,2 @@
+/tasks/harbor/harbor*.tgz
+/tasks/docker/centos_arrch64_rpm/*.rpm
