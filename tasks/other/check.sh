@@ -60,9 +60,7 @@ report_JDK="$(java -version 2>&1 | grep version | awk '{print $1,$3}' | tr '[:lo
 
 # 打印分隔符
 function printLine() {
-  echo ""
-  printf "%-70s" "-" | sed 's/\s/-/g'
-  echo ""
+  printf "%-70s\n" "-" | sed 's/\s/-/g'
 }
 
 # 保留颜色显示
@@ -95,6 +93,24 @@ function echoBlankLine() {
   echo ""
 }
 
+# log 日志输出 时间+INFO
+# 2023-08-01 10:13:26.457  INFO :
+logInfo() {
+  echo -e "$(date '+%Y-%m-%d %H:%M:%S.%3N')   \033[32mINFO\033[0m : $*"
+}
+
+# log 日志输出 时间+ERROR
+# 2023-08-01 10:13:26.457  ERROR :
+logError() {
+  echo -e "\033[31m$(date '+%Y-%m-%d %H:%M:%S.%3N')  ERROR : $*\033[0m"
+}
+
+# log 日志输出 时间+WARN
+# 2023-08-01 10:13:26.457  WARN :
+logWarn() {
+  echo -e "$(date '+%Y-%m-%d %H:%M:%S.%3N')   \033[33mWARN\033[0m : $*"
+}
+
 # 判断是否存在wget命令,没有则退出
 function judgeWget() {
   if [ ! -e '/usr/bin/wget' ]; then
@@ -119,28 +135,31 @@ function checkNullToDefault() {
 # 输出检查时间
 function checkTime() {
   printLine
-  echoLnWithGreen "检查时间        : $TIME"
+  logInfo "检查开始"
 }
 
 # 输出主机信息
 function checkHost() {
-  echoLnWithGreen "主机信息"
-  echoLnWithGreen "主机名          : $HOSTNAME"
-  echoLnWithGreen "HOSTS文件"
-  echo "$HOST"
+  logInfo "检查主机信息
+主机名          : $HOSTNAME"
+  
+  logInfo "HOSTS文件  
+$HOST"
+
 }
 
 # 输出语言环境 JDK
 function checkJDKStatus() {
   printLine
-  echoLnWithBlue "语言环境"
-  echoBlankLine
   java -version 2>/dev/null
   if [ $? -eq 0 ]; then
     java -version 2>/dev/null
   fi
-  echo "JAVA版本          : $report_JDK"
-  echo "JAVA_HOME         : \"$JAVA_HOME\""
+
+  logInfo "检查语言环境
+JAVA版本          : $report_JDK
+JAVA_HOME         : $JAVA_HOME"
+
 }
 
 ## 输出磁盘信息
@@ -154,17 +173,19 @@ function checkJDKStatus() {
 # 输出安全状态
 function checkSafe() {
   printLine
-  echoLnWithBlue "安全状态"
   fwStatus=$(systemctl status firewalld | grep Active | awk -F '(' '{print $2}' | awk -F ')' '{print $1}' | tr '[:lower:]' '[:upper:]')
   slStatus=$(grep -Ev '^#|SELINUXTYPE|^$' /etc/selinux/config | awk -F '=' '{print $2}' | tr '[:lower:]' '[:upper:]')
-  echo "防火墙            :$fwStatus"
-  echo "SELINUX           :$slStatus"
+
+  logInfo "检查安全状态
+防火墙            :$fwStatus
+SELINUX           :$slStatus"
+
 }
 
 # 输出定时任务
 function checkCron() {
   printLine
-  echoLnWithBlue "定时任务"
+  logInfo "检查定时任务"
   crontab=0
   for shell in $(grep -v "/sbin/nologin" /etc/shells); do
     for user in $(grep "$shell" /etc/passwd | awk -F: '{print $1}'); do
@@ -175,7 +196,7 @@ function checkCron() {
         echo "--------"
         crontab -l -u $user
         let crontab=crontab+$(crontab -l -u $user | wc -l)
-        echoBlankLine
+
       fi
     done
   done
@@ -184,18 +205,22 @@ function checkCron() {
   let crontab=crontab+$(find /etc/cron* -type f | wc -l)
   #报表信息
   reportCrontab="$crontab"
+
 }
 
 # 输出服务列表
 function checkServices() {
-  echoLnWithBlue "服务列表"
+  printLine
+  logInfo "检查服务列表"
   running_server=$(systemctl list-units --type=service --state=running --no-pager | grep .service | awk -F'loaded active running' '{print $1,$2}' | nl)
   enabled_server=$(systemctl list-unit-files --type=service --state=enabled --no-pager | awk '{print $1}' | awk 'NR>2{print p}{p=$0}' | nl)
-  echoLnWithBlue "正在运行"
-  echo "$running_server"
-  echoLnWithBlue "开机自启"
-  echo "$enabled_server"
+  
+  logInfo "正在运行的服务列表
+$running_server"
 
+  
+  logInfo "开机自启的服务列表
+$enabled_server"
 }
 
 # 输出用户检查
@@ -251,10 +276,10 @@ function getUserLastLogin() {
 
 # 输出用户状态
 function checkUserStatus() {
-  echoBlankLine
+  printLine
   pwdfile="$(cat /etc/passwd)"
   Modify=$(stat /etc/passwd | grep Modify | tr '.' ' ' | awk '{print $2,$3}')
-  echoLnWithBlue "特权用户"
+  logInfo "检查特权用户"
   rootUser=""
   for user in $(echo "$pwdfile" | awk -F: '{print $1}'); do
     if [ $(id -u $user) -eq 0 ]; then
@@ -262,8 +287,9 @@ function checkUserStatus() {
       rootUser="$rootUser,$user"
     fi
   done
-  echoBlankLine
-  echoLnWithBlue "可登录用户"
+
+  
+  logInfo "检查可登录用户"
   userList=0
   echo "$(
     echo "USER UID GID HOME SHELL last_login"
@@ -275,9 +301,10 @@ function checkUserStatus() {
       let userList=userList+$(echo "$pwdfile" | grep "$shell" | wc -l)
     done
   )" | column -t
-  echoBlankLine
-  echoLnWithBlue "空密码用户"
-  echoBlankLine
+
+  
+  logInfo "检查空密码用户"
+
   userEmptyPassword=""
   for shell in $(grep -v "/sbin/nologin" /etc/shells); do
     for user in $(echo "$pwdfile" | grep "$shell" | cut -d: -f1); do
@@ -288,9 +315,9 @@ function checkUserStatus() {
       fi
     done
   done
-  echoBlankLine
-  echoLnWithBlue "相同ID用户"
-  echoBlankLine
+
+  
+  logInfo "检查相同ID用户"
   userTheSameUID=""
   UIDs=$(cut -d: -f3 /etc/passwd | sort | uniq -c | awk '$1>1{print $2}')
   for uid in $UIDs; do
@@ -298,7 +325,7 @@ function checkUserStatus() {
     userTheSameUID="$uid"
     r=$(awk -F: 'ORS="";$3=='"$uid"'{print ":",$1}' /etc/passwd)
     echo "$r"
-    echoBlankLine
+
     userTheSameUID="$userTheSameUID $r,"
   done
   #报表信息
@@ -306,16 +333,18 @@ function checkUserStatus() {
   report_USEREmptyPassword=$(echo $userEmptyPassword | sed 's/^,//')
   report_USERTheSameUID=$(echo $userTheSameUID | sed 's/,$//')
   report_RootUser=$(echo $RootUser | sed 's/^,//')
+
 }
 
 # 输出密码检查
 function checkPasswordStatus {
   printLine
-  echoLnWithBlue "密码检查"
-  echo "最后一次改密码: $Modify ($(checkUserLogin $Modify))"
-  echoBlankLine
+  logInfo "密码检查
+最后一次改密码: $Modify ($(checkUserLogin $Modify))"
+
   pwdfile="$(cat /etc/passwd)"
-  echoLnWithBlue "过期时间"
+  
+  logInfo "过期时间"
   result=""
   for shell in $(grep -v "/sbin/nologin" /etc/shells); do
     for user in $(echo "$pwdfile" | grep "$shell" | cut -d: -f1); do
@@ -334,9 +363,9 @@ function checkPasswordStatus {
     done
   done
   report_PasswordExpiry=$(echo $result | sed 's/^,//')
-  echoBlankLine
-  echoLnWithBlue "密码策略"
-  echoBlankLine
+
+  
+  logInfo "密码策略"
   grep -v "#" /etc/login.defs | grep -E "PASS_MAX_DAYS|PASS_MIN_DAYS|PASS_MIN_LEN|PASS_WARN_AGE"
 }
 
@@ -344,45 +373,45 @@ function checkPasswordStatus {
 function checkSoftOfInstalled() {
 
   printLine
-  echoLnWithBlue "软件安装记录"
+  logInfo "软件安装记录"
   soft_number=$(rpm -qa --last | wc -l)
-  echoBlankLine
-  echoLnWithBlue "最新安装$soft_number 个"
-  echoLnWithBlue "最新10条:"
+
+  
+  logInfo "最新安装$soft_number 个"
+  
+  logInfo "最新10条:"
   rpm -qa --last | head -10 | column -t
 
   printLine
-  echoBlankLine
-  time_now=$(date +"%F   %T  %A" | column -t)
-  echoLnWithBlue "当前时间: $time_now"
-
-  printLine
-  echoLnWithBlue "自启动"
+  
+  logInfo "自启动"
   auto_action=$(grep -Ev "^#|^$" /etc/rc.d/rc.local)
   auto_number=$(grep -Ev "^#|^$" /etc/rc.d/rc.local | wc -l)
-  echoBlankLine
-  echoLnWithBlue "明细$auto_number 个"
+
+  
+  logInfo "明细$auto_number 个"
   echo "$auto_action"
 
   printLine
-  echoLnWithBlue "进程检查"
+  
+  logInfo "进程检查"
   defunct_number=$(ps -ef | grep defunct | grep -v grep | wc -l)
-  echoLnWithBlue "僵尸数量 $defunct_number"
+  
+  logInfo "僵尸数量 $defunct_number"
   ps -ef | head -n1
   ps -ef | grep defunct | grep -v grep
-  echoBlankLine
 }
 
 # 输出CPU内存TOP10
 function topCpuAndMem() {
   printLine
   CPU_TOP10=$(top b -n1 | head -17 | tail -11 | awk '{print $1, $2,  $9, $12}' | column -t)
-  MEM_TOP10=$(ps aux | awk '{print $1, $2, $4, $6, $11}' | sort -k3rn | head -10 | column -t)
-  echoLnWithBlue "内存 TOP10"
-  echo "USER PID %MEM RSS COMMAND$MEM_TOP10" | column -t
-  echoBlankLine
+  MEM_TOP10=$(ps aux | sort -k4rn | head -10 | awk '{print $2, $1, $4, $6, $11}')
+  logInfo "内存 TOP10"
+  echo -e "PID USER %MEM RSS COMMAND\n$MEM_TOP10" | column -t
 
-  echoLnWithBlue "CPU TOP10"
+  
+  logInfo "CPU TOP10"
   echo "$CPU_TOP10"
   printLine
 
@@ -390,76 +419,78 @@ function topCpuAndMem() {
 
 # 输出网络检查
 function checkNetwork() {
-
-  echoLnWithBlue "网络信息"
-  echoLnWithBlue "地址"
   IP=$(ip a | grep -E 'eth0|ens33' | grep '/2\|/8\|/16\|/24' | awk '{print $2}' | awk -F'/' '{print $1}' | tr '' ',' | sed 's/,$//')
   GATEWAY=$(ip route | grep default | awk '{print $3}')
   MAC=$(ip link | grep -v "LOOPBACK\|loopback" | awk '{print $2}' | sed 'N;s///' | tr '' ',' | sed 's/,$//')
   DNS=$(grep nameserver /etc/resolv.conf | grep -v "#" | awk '{print $2}' | tr '' ',' | sed 's/,$//')
-  echoBlankLine
-  echo "IP地址               :  $IP "
-  echo "MAC地址              ： $MAC"
-  echo "DNS地址              ： $DNS"
-  echo "网关地址             ： $GATEWAY"
+  logInfo "网络信息"
+  
+  logInfo "地址
+IP地址               :  $IP
+MAC地址              ： $MAC
+DNS地址              ： $DNS
+网关地址             ： $GATEWAY"
 }
 
 # 输出端口检查
 function checkPortDetails() {
-  echoBlankLine
-  echoLnWithBlue "连接"
+
+  logInfo "连接"
   netstat -n | grep -v '127.0.0.1' | awk '/^tcp/ {++S[$NF]} END {for(a in S) print a, S[a]}'
 
-  echoBlankLine
-  echoLnWithBlue "监听"
+  
+  logInfo "监听"
   netstat -tnpl | awk 'NR>2 {printf "%-20s %-15s ",$4,$7}'
+  printf "\n"
   printLine
-  echoLnWithGreen "端口信息"
-  echoBlankLine
-  echoLnWithGreen "TCP"
+  
+  logInfo "端口信息"
+
+  
+  logInfo "TCP"
   netstat -ntpl
-  echoBlankLine
-  echoLnWithGreen "UDP"
+
+  
+  logInfo "UDP"
   netstat -nupl
-  echoBlankLine
   printLine
 }
 
 # 输出 TCP 端口冲突
 function checkTcpConflict() {
-  echoLnWithRed "可能冲突的TCP端口"
+  logError "可能冲突的TCP端口"
   netstat -ntpl | grep --color=auto "$needCheckTcpPort"
 }
 
 # 输出 UDP 端口冲突
 function checkUdpConflict() {
-  echoBlankLine
-  echoLnWithRed "可能冲突的UDP端口"
+  logError "可能冲突的UDP端口"
   netstat -nupl | grep --color=always "$needCheckTcpPort"
 }
 
 # 输出系统信息
 function totalDetails() {
   printLine
-  echoLnWithBlue "硬件配置"
-  echo -e "CPU 型号                     : $cname"
-  echo -e "CPU 主频                     : $freq MHz"
-  echo -e "CPU 架构                     : $arch ($lbit Bit)"
-  echo -e "CPU 物理数                   : $Physical_CPUs"
-  echo -e "CPU 逻辑数                   : $Virt_CPUs"
-  echo -e "CPU 核心数                   : $cores"
-  echoBlankLine
-  echo -e "系统空闲时间                 : $up"
-  echo -e "系统平均负载                 : $load"
-  echo -e "系统版本                     : $opsy"
-  echo -e "内核版本                     : $kern"
-  echoBlankLine
-  echo -e "磁盘空间(总/已用/可用)       : $disk_total_size GB ($(echoLnWithRed "$disk_used_size GB") Used,$(echoLnWithGreen "$disk_unused_size GB") Available)"
-  echo -e "物理内存(总/已用/可用)       : $tram MB ($(echoLnWithRed "$uram MB") Used,$(echoLnWithGreen "$uramAvailable MB") Available)"
-  echo -e "虚拟内存(总/已用/可用)       : $swap MB ($(echoLnWithRed "$uswap MB") Used,$(echoLnWithGreen "$(checkNullToDefault "$uswapAvailable" 0) MB") Available)"
+  logInfo "硬件配置
+CPU 型号                     : $cname
+CPU 主频                     : $freq MHz
+CPU 架构                     : $arch ($lbit Bit)
+CPU 物理数                   : $Physical_CPUs
+CPU 逻辑数                   : $Virt_CPUs
+CPU 核心数                   : $cores
+
+系统空闲时间                 : $up
+系统平均负载                 : $load
+系统版本                     : $opsy
+内核版本                     : $kern
+磁盘空间(总/已用/可用)       : $disk_total_size GB ($(echoLnWithRed "$disk_used_size GB") Used,$(echoLnWithGreen "$disk_unused_size GB") Available)
+物理内存(总/已用/可用)       : $tram MB ($(echoLnWithRed "$uram MB") Used,$(echoLnWithGreen "$uramAvailable MB") Available)
+虚拟内存(总/已用/可用)       : $swap MB ($(echoLnWithRed "$uswap MB") Used,$(echoLnWithGreen "$(checkNullToDefault "$uswapAvailable" 0) MB") Available)"
 
   printLine
-  echoLnWithBlue "IO性能"
+
+  
+  logInfo "IO性能测试"
   io1=$(ioTest)
   echo "I/O speed(1st run)   : $io1"
   io2=$(ioTest)
@@ -505,7 +536,7 @@ function finish() {
   cpuFrequency=$(echo "scale=0; $freq / 1.0" | bc)
 
   checkResult=1
-  echoLnWithGreen "检测完成"
+  logInfo "检测完成"
 
   if [[ -n $systemFlag ]]; then
     echo -e "- 操作系统是否满足(Centos7.9) ? $(echoLnWithGreen "✔ ")"
@@ -520,8 +551,8 @@ function finish() {
     checkResult=0
     echo -e "- 可用存储空间是否满足(4T) ? $(echoLnWithRed "✘")"
   fi
-
-  if ((memoryFreeSpace >= 32)); then
+  result=$(echo "$memoryFreeSpace >= 25.6" | bc)
+  if [ $result -eq 1 ]; then
     echo -e "- 可用内存空间是否满足(32G) ? $(echoLnWithGreen "✔ ")"
   else
     checkResult=0
@@ -542,9 +573,9 @@ function finish() {
     echo -e "- CPU频率是否满足(2.3GHz) ? $(echoLnWithRed "✘")"
   fi
 
-   # 判断是否存在的命令
+  # 判断是否存在的命令
   if [[ -z $(command -v netstat) ]]; then
-    echoLnWithRed "注意: netstat命令不存在，无法检测端口是否满足，请先安装netstat命令\nyum install net-tools"
+    logError "注意: netstat命令不存在，无法检测端口是否满足，请先安装netstat命令\nyum install net-tools"
   else
     tcp=$(netstat -ntpl | grep --color=auto "$needCheckTcpPort")
     udp=$(netstat -nupl | grep --color=auto "$needCheckTcpPort")
@@ -562,7 +593,6 @@ function finish() {
     echoLnWithGreen "检测结果: 环境满足部署"
   fi
 }
-
 
 #这里组织逻辑#############################################################################################################
 
@@ -595,7 +625,6 @@ main() {
 
   totalDetails
   finish
-  printLine
 }
 
 main
